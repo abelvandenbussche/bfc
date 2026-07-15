@@ -55,7 +55,7 @@ fn main() {
         }
     }
 
-    // TODO Check for syntax errors
+    // Checking for unmatched brackets
     let mut depth = 0;
     for i in &commands {
         match i {
@@ -65,10 +65,29 @@ fn main() {
         }
     }
     if depth != 0 {
-        eprintln!("Syntax error");
+        eprintln!("Error: unmatched bracket");
         return;
     }
-    // TODO Optimizing the intermediate representation
+
+    // Optimise the subtract and add
+    let mut optimised = vec![];
+    let mut counter: i32 = 0;
+    for i in commands {
+        match i {
+            Command::Add(n) => counter += n as i32,
+            Command::Sub(n) => counter -= n as i32,
+            _ => {
+                if counter > 0 {
+                    optimised.push(Command::Add(counter as u8));
+                } else if counter < 0 {
+                    optimised.push(Command::Sub((-counter) as u8));
+                }
+                counter = 0;
+                optimised.push(i);
+            }
+        }
+    }
+    commands = optimised;
 
     // Converting intermediate into assembly
     let file = match File::create(format!("bin/{}.asm", file_name)) {
