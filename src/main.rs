@@ -10,6 +10,8 @@ enum Command {
     MoveLeft(u32),
     Output,
     Input,
+    LoopStart,
+    LoopEnd,
 }
 
 fn main() {
@@ -44,6 +46,8 @@ fn main() {
             '-' => Some(Command::Sub(1)),
             '.' => Some(Command::Output),
             ',' => Some(Command::Input),
+            '[' => Some(Command::LoopStart),
+            ']' => Some(Command::LoopEnd),
             _ => None,
         };
         if let Some(cmd) = output {
@@ -51,6 +55,7 @@ fn main() {
         }
     }
 
+    // TODO Check for syntax errors
     // TODO Optimizing the intermediate representation
 
     // Converting intermediate into assembly
@@ -85,6 +90,8 @@ fn main() {
         .unwrap();
 
     // Adding the bf commands
+    let mut label_numbers = vec![];
+    let mut next_number = 0;
     for cmd in commands {
         let to_write = match cmd {
             Command::Add(n) => format!("add byte [r12], {n}"),
@@ -92,7 +99,6 @@ fn main() {
             // TODO add boundary checks or something
             Command::MoveLeft(n) => format!("sub r12, {n}"),
             Command::MoveRight(n) => format!("add r12, {n}"),
-            // TODO add the other commands
             // TODO remove assembly comments here
             Command::Output => String::from(
                 "
@@ -114,6 +120,19 @@ mov qword [rsp+32], 0 ; set the fifth arg to null
 call ReadFile
                     ",
             ),
+            Command::LoopStart => {
+                label_numbers.push(next_number);
+                next_number += 1;
+                format!(
+                    "cmp byte [r12], 0\nje loop_end{}\nloop{}:",
+                    next_number - 1,
+                    next_number - 1
+                )
+            }
+            Command::LoopEnd => {
+                let label_number = label_numbers.pop().unwrap();
+                format!("cmp byte [r12], 0\njne loop{label_number}\nloop_end{label_number}:")
+            }
         };
         writer
             .write_all(format!("{to_write}\n").as_bytes())
