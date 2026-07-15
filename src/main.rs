@@ -56,6 +56,18 @@ fn main() {
     }
 
     // TODO Check for syntax errors
+    let mut depth = 0;
+    for i in &commands {
+        match i {
+            Command::LoopStart => depth += 1,
+            Command::LoopEnd => depth -= 1,
+            _ => {}
+        }
+    }
+    if depth != 0 {
+        eprintln!("Syntax error");
+        return;
+    }
     // TODO Optimizing the intermediate representation
 
     // Converting intermediate into assembly
