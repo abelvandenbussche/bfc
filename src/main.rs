@@ -67,14 +67,21 @@ fn main() {
     writer.write_all(b"BITS 64\n").unwrap();
     writer.write_all(b"extern GetStdHandle\n").unwrap();
     writer.write_all(b"extern WriteFile\n").unwrap();
+    writer.write_all(b"extern ReadFile\n").unwrap();
     writer.write_all(b"extern ExitProcess\n").unwrap();
     writer.write_all(b"global start\n").unwrap();
     writer
-        .write_all(b"section .bss\ntape: resb 3000\nwritten: resb 1\n")
+        .write_all(b"section .bss\ntape: resb 3000\nwritten: resb 1\nread: resd 1\n")
         .unwrap();
     writer.write_all(b"section .text\n").unwrap();
     writer
         .write_all(b"start:\nsub rsp, 40\nlea r12, [rel tape]\n")
+        .unwrap();
+    writer
+        .write_all(b"mov ecx, -11\ncall GetStdHandle\nmov r13, rax\n")
+        .unwrap();
+    writer
+        .write_all(b"mov ecx, -10\ncall GetStdHandle\nmov r14, rax\n")
         .unwrap();
 
     // Adding the bf commands
@@ -89,9 +96,7 @@ fn main() {
             // TODO remove assembly comments here
             Command::Output => String::from(
                 "
-mov ecx, -11
-call GetStdHandle
-mov rcx, rax ; give handle to function
+mov rcx, r13 ; give handle to function
 mov rdx, r12 ; address of what to write
 mov r8d, 1 ; how many bytes to write
 lea r9, [rel written] ; give windows address to write bytes written to
@@ -99,7 +104,16 @@ mov qword [rsp+32], 0 ; set the fifth arg to null
 call WriteFile
                     ",
             ),
-            _ => String::new(),
+            Command::Input => String::from(
+                "
+mov rcx, r14 ; give handle to function
+mov rdx, r12 ; address to write to
+mov r8d, 1 ; how many bytes to read
+lea r9, [rel read] ; give windows address to write bytes read to
+mov qword [rsp+32], 0 ; set the fifth arg to null
+call ReadFile
+                    ",
+            ),
         };
         writer
             .write_all(format!("{to_write}\n").as_bytes())
