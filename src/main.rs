@@ -1,6 +1,7 @@
 use std::fs::{File, read_to_string};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::process::{self};
 
 enum Command {
     Add(u8),
@@ -20,7 +21,11 @@ fn main() {
             eprintln!("Path should contain file name");
             return;
         }
-    };
+    }
+    .to_string_lossy();
+
+    let output_path = "bin/";
+
     let file_contents = match read_to_string(&file_path) {
         Ok(s) => s,
         Err(_) => {
@@ -49,7 +54,7 @@ fn main() {
     // TODO Optimizing the intermediate representation
 
     // Converting intermediate into assembly
-    let file = match File::create(format!("bin/{}.asm", file_name.to_string_lossy())) {
+    let file = match File::create(format!("bin/{}.asm", file_name)) {
         Ok(f) => f,
         Err(_) => {
             eprintln!("Failed to create file");
@@ -65,10 +70,12 @@ fn main() {
     writer.write_all(b"extern ExitProcess\n").unwrap();
     writer.write_all(b"global start\n").unwrap();
     writer
-        .write_all(b"section .bss\ntape: resb 3000\n")
+        .write_all(b"section .bss\ntape: resb 3000\nwritten: resb 1\n")
         .unwrap();
     writer.write_all(b"section .text\n").unwrap();
-    writer.write_all(b"start:\nlea r12, [rel tape]\n").unwrap();
+    writer
+        .write_all(b"start:\nsub rsp, 40\nlea r12, [rel tape]\n")
+        .unwrap();
 
     // Adding the bf commands
     for cmd in commands {
@@ -79,6 +86,19 @@ fn main() {
             Command::MoveLeft(n) => format!("sub r12, {n}"),
             Command::MoveRight(n) => format!("add r12, {n}"),
             // TODO add the other commands
+            // TODO remove assembly comments here
+            Command::Output => String::from(
+                "
+mov ecx, -11
+call GetStdHandle
+mov rcx, rax ; give handle to function
+mov rdx, r12 ; address of what to write
+mov r8d, 1 ; how many bytes to write
+lea r9, [rel written] ; give windows address to write bytes written to
+mov qword [rsp+32], 0 ; set the fifth arg to null
+call WriteFile
+                    ",
+            ),
             _ => String::new(),
         };
         writer
@@ -87,7 +107,32 @@ fn main() {
     }
 
     // Appendix
-    writer.write_all(b"xor ecx, ecx\ncall ExitProcess").unwrap();
+    writer
+        .write_all(b"add rsp, 40\nxor ecx, ecx\ncall ExitProcess")
+        .unwrap();
 
     writer.flush().unwrap();
+
+    // Compiling into executable
+    process::Command::new("nasm")
+        .args([
+            "-f",
+            "win64",
+            &format!("{output_path}{file_name}.asm"),
+            "-o",
+            &format!("{output_path}{file_name}.obj"),
+        ])
+        .status()
+        .expect("Failed to run nasm");
+
+    process::Command::new("lld-link")
+        .args([
+            &format!("{output_path}{file_name}.obj"),
+            "kernel32.lib",
+            "/ENTRY:start",
+            "/SUBSYSTEM:CONSOLE",
+            &format!("/OUT:{output_path}{file_name}.exe"),
+        ])
+        .status()
+        .expect("Failed to run lld-link");
 }
